@@ -105,21 +105,39 @@ private:
 		{
 			//directory
 
-			WIN32_FIND_DATA fd;
-			HANDLE hff = FindFirstFile((PathFrom + L"\\*").c_str(), &fd); 
-
 			std::vector<std::wstring> arrfilename;
 
-			if ( hff != INVALID_HANDLE_VALUE )
-			{
-				do
-				{
-					arrfilename.push_back(fd.cFileName);
-				} while ( FindNextFile(hff, &fd) );
-				FindClose(hff);
-			}
+			std::tr1::function<void (const std::wstring& CurDir)> addfilelist;
 
-			CreateDirectory(PathTo.c_str(), NULL);
+			addfilelist =
+				[&](const std::wstring& CurDir) mutable
+				{
+					CreateDirectory((PathTo + L"\\" + CurDir).c_str(), 0);
+					WIN32_FIND_DATA fd;
+					HANDLE hff = FindFirstFile((PathFrom + L"\\" + CurDir + L"\\*").c_str(), &fd); 
+					if ( hff != INVALID_HANDLE_VALUE )
+					{
+						do
+						{
+							if (
+								!(fd.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE)
+								&& (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+								)
+							{
+								if ( std::wstring(fd.cFileName) == L"."
+									|| std::wstring(fd.cFileName) == L".." ) continue;
+
+								// directory
+								addfilelist(CurDir + L"\\" + fd.cFileName);
+							} else
+							{
+								arrfilename.push_back(CurDir + L"\\" + fd.cFileName);
+							}
+						} while ( FindNextFile(hff, &fd) );
+						FindClose(hff);
+					}
+				};
+			addfilelist(L".");
 
 			SYSTEM_INFO si;
 			GetSystemInfo(&si);
